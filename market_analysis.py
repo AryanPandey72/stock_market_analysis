@@ -1,161 +1,139 @@
 import pandas as pd
-from pandas import Series,DataFrame
 import numpy as np
-
-#Visualisation imports
 import matplotlib.pyplot as plt
 import seaborn as sns
-sns.set_style('whitegrid')
-%matplotlib inline
-#To grab stock data
-from pandas_datareader import DataReader
+import yfinance as yf
 from datetime import datetime
 
-tech_list = ['AAPL','GOOGL','MSFT','AMZN']
+# Seaborn styling
+sns.set_style('whitegrid')
 
-end = datetime.now()
+# Tech stock list
+tech_list = ['AAPL', 'GOOGL', 'MSFT', 'AMZN']
 
-#Start date set to 1 year back
-start = datetime(end.year-1,end.month,end.day)
-
-import datetime
-import yfinance as yf
 # Date range
-start = datetime.datetime(2020, 1, 1)
-end = datetime.datetime(2024, 1, 1)
+start = datetime(2020, 1, 1)
+end = datetime(2024, 1, 1)
 
-# Fetch data directly with yfinance
+# Download data using yfinance with clean column structure
 for stock in tech_list:
     try:
-        data = yf.download(stock, start=start, end=end)
+        data = yf.download(stock, start=start, end=end, group_by='column', auto_adjust=False)
         globals()[stock] = data
         print(f"Data retrieved for {stock}")
     except Exception as e:
         print(f"Failed to retrieve data for {stock}: {e}")
 
-AAPL.head()
+# -- AAPL Analysis --
 
-AAPL.describe()
-AAPL.info()
-AAPL['Adj Close'].plot(legend=True,figsize=(12,5))
-AAPL['Volume'].plot(legend=True,figsize=(12,5))
+# Preview AAPL
+print(AAPL.head())
+print(AAPL.describe())
+print(AAPL.info())
 
-ma_day = [10,20,50]
+# Plot Adjusted Close and Volume
+AAPL['Adj Close'].plot(legend=True, figsize=(12, 5), title='AAPL Adjusted Close Price')
+plt.show()
 
+AAPL['Volume'].plot(legend=True, figsize=(12, 5), title='AAPL Trading Volume')
+plt.show()
+
+# Moving Averages
+ma_day = [10, 20, 50]
 for ma in ma_day:
-    column_name = "MA for %s days" %(str(ma))
+    AAPL[f"MA for {ma} days"] = AAPL['Adj Close'].rolling(window=ma).mean()
 
-    AAPL[column_name] = AAPL['Adj Close'].rolling(window=ma,center=False).mean()
+AAPL[['Adj Close', 'MA for 10 days', 'MA for 20 days', 'MA for 50 days']].plot(figsize=(12, 5), title='AAPL Moving Averages')
+plt.show()
 
-AAPL.tail()
-AAPL[['Adj Close','MA for 10 days','MA for 20 days','MA for 50 days']].plot(subplots=False,figsize=(12,5))
-
+# Daily Returns
 AAPL['Daily Return'] = AAPL['Adj Close'].pct_change()
-AAPL['Daily Return'].tail()
-AAPL['Daily Return'].plot(figsize=(14,5),legend=True,linestyle='--',marker='o')
-sns.histplot(x=AAPL['Daily Return'].dropna(),bins=100,color='red')
-import yfinance as yf
-from pandas_datareader import data as pdr
-import pandas as pd
+AAPL['Daily Return'].plot(figsize=(14, 5), legend=True, linestyle='--', marker='o', title='AAPL Daily Returns')
+plt.show()
 
-# Use yfinance to download data directly
-close_df = pd.DataFrame()  # Initialize an empty DataFrame
+sns.histplot(AAPL['Daily Return'].dropna(), bins=100, color='red')
+plt.title('AAPL Daily Return Distribution')
+plt.show()
+
+# Create adjusted close prices dataframe
+close_df = pd.DataFrame()
 
 for stock in tech_list:
     try:
-        data = yf.download(stock, start=start, end=end)
-        adj_close = data['Adj Close']
-
-        # Check if adj_close is a scalar and convert to a Series if needed
-        if not isinstance(adj_close, (pd.Series, pd.DataFrame)):
-            adj_close = pd.Series(adj_close, index=[data.index[0]]) # Create a Series with a single value
-
-        close_df[stock] = adj_close
-        print(f"Data retrieved for {stock}")
+        data = yf.download(stock, start=start, end=end, group_by='column', auto_adjust=False)
+        close_df[stock] = data['Adj Close']
     except Exception as e:
         print(f"Failed to retrieve data for {stock}: {e}")
-close_df.tail()
+
+# Daily percentage returns
 rets_df = close_df.pct_change()
-rets_df.tail()
+print(rets_df.tail())
+
+# Correlation plots
 sns.jointplot(x='GOOGL', y='GOOGL', data=rets_df, kind='scatter', color='green')
 sns.jointplot(x='GOOGL', y='AAPL', data=rets_df, kind='scatter')
 sns.pairplot(rets_df.dropna())
-sns.heatmap(rets_df.dropna(),annot=True)
-rets = rets_df.dropna()
-plt.figure(figsize=(8,5))
+plt.show()
 
-plt.scatter(rets.mean(),rets.std(),s=25)
-
+# Risk vs Return
+plt.figure(figsize=(8, 5))
+plt.scatter(rets_df.mean(), rets_df.std(), s=25)
 plt.xlabel('Expected Return')
 plt.ylabel('Risk')
+plt.title('Risk vs Return')
 
+# Annotate points
+for label, x, y in zip(rets_df.columns, rets_df.mean(), rets_df.std()):
+    plt.annotate(label, xy=(x, y), xytext=(-120, 20),
+                 textcoords='offset points', ha='right', va='bottom',
+                 arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=-0.5'))
+plt.show()
 
-#For adding annotatios in the scatterplot
-for label,x,y in zip(rets.columns,rets.mean(),rets.std()):
-    plt.annotate(
-    label,
-    xy=(x,y),xytext=(-120,20),
-    textcoords = 'offset points', ha = 'right', va = 'bottom',
-    arrowprops = dict(arrowstyle='->',connectionstyle = 'arc3,rad=-0.5'))
-sns.histplot(x=AAPL['Daily Return'].dropna(),bins=100,color='purple')
-rets.head()
-#Using Pandas built in qualtile method
-rets['AAPL'].quantile(0.05)
+# Value at Risk (VaR) for AAPL
+print("AAPL VaR (0.05 quantile):", rets_df['AAPL'].quantile(0.05))
+
+# -- Monte Carlo Simulation for GOOGL --
+
+# Parameters
 days = 365
+dt = 1 / days
+mu = rets_df.mean()['GOOGL']
+sigma = rets_df.std()['GOOGL']
+start_price = float(GOOGL['Adj Close'].iloc[-1])  # Last known price
 
-#delta t
-dt = 1/365
-
-mu = rets.mean()['GOOGL']
-
-sigma = rets.std()['GOOGL']
-#Function takes in stock price, number of days to run, mean and standard deviation values
-def stock_monte_carlo(start_price,days,mu,sigma):
-
+# Monte Carlo simulation function
+def stock_monte_carlo(start_price, days, mu, sigma):
     price = np.zeros(days)
     price[0] = start_price
-
-    shock = np.zeros(days)
-    drift = np.zeros(days)
-
-    for x in range(1,days):
-
-        #Shock and drift formulas taken from the Monte Carlo formula
-        shock[x] = np.random.normal(loc=mu*dt,scale=sigma*np.sqrt(dt))
-
-        drift[x] = mu * dt
-
-        #New price = Old price + Old price*(shock+drift)
-        price[x] = price[x-1] + (price[x-1] * (drift[x]+shock[x]))
-
+    for x in range(1, days):
+        shock = np.random.normal(loc=mu * dt, scale=sigma * np.sqrt(dt))
+        drift = mu * dt
+        price[x] = price[x - 1] + (price[x - 1] * (drift + shock))
     return price
-GOOGL.head()
-start_price = 622.049 #Taken from above
 
+# Plot 100 simulations
 for run in range(100):
-    plt.plot(stock_monte_carlo(start_price,days,mu,sigma))
-
+    plt.plot(stock_monte_carlo(start_price, days, mu, sigma))
 plt.xlabel('Days')
 plt.ylabel('Price')
-plt.title('Monte Carlo Analysis for Google')
+plt.title('Monte Carlo Simulation - GOOGL')
+plt.show()
+
+# Histogram of 10,000 simulations
 runs = 10000
-
 simulations = np.zeros(runs)
-
 for run in range(runs):
-    simulations[run] = stock_monte_carlo(start_price,days,mu,sigma)[days-1]
-q = np.percentile(simulations,1)
+    simulations[run] = stock_monte_carlo(start_price, days, mu, sigma)[-1]
 
-plt.hist(simulations,bins=200)
+q = np.percentile(simulations, 1)
 
-plt.figtext(0.6,0.8,s="Start price: $%.2f" %start_price)
-
-plt.figtext(0.6,0.7,"Mean final price: $%.2f" % simulations.mean())
-
-plt.figtext(0.6,0.6,"VaR(0.99): $%.2f" % (start_price -q,))
-
-plt.figtext(0.15,0.6, "q(0.99): $%.2f" % q)
-
+plt.hist(simulations, bins=200)
 plt.axvline(x=q, linewidth=4, color='r')
 
-plt.title(u"Final price distribution for Google Stock after %s days" %days, weight='bold')
+plt.figtext(0.6, 0.8, f"Start price: ${start_price:.2f}")
+plt.figtext(0.6, 0.7, f"Mean final price: ${simulations.mean():.2f}")
+plt.figtext(0.6, 0.6, f"VaR(0.99): ${start_price - q:.2f}")
+plt.figtext(0.15, 0.6, f"q(0.99): ${q:.2f}")
+
+plt.title(f"Final price distribution for GOOGL after {days} days", weight='bold')
+plt.show()
